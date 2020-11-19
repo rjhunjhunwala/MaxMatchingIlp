@@ -37,7 +37,8 @@ def do_matching(graph, visualize = True):
             s, t = (u, v) if u < v else (v, u)
             edge = (s,t)
             E.add(edge)
-            weights[edge] = weight
+            weights[original, u] = weight
+
 
     if visualize:
         graph = nx.Graph()
@@ -156,7 +157,7 @@ def get_stable_roommates_instance():
 "6" :   [(5, 6),  (1, 5), (3, 4), (4, 3), (2, 2)]}
 
 
-graph = get_graph(random=True, N = 300, AVG_DEGREE= 3)
+graph = get_graph(random=True, N = 300, AVG_DEGREE= 15)
 # graph = get_stable_roommates_instance() # solution {1, 6}, {2,4}, {3, 5}}
 result_max = do_matching(graph, visualize = False)
 result_stable = do_matching_stable(graph, visualize = False, individual = 1, communal = 1000)
