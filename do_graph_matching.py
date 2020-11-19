@@ -50,7 +50,7 @@ def do_matching(graph, visualize = True):
     edge_vars = {e:model.add_var(var_type = BINARY) for e in E}
     for v in V:
         model += xsum(edge_vars[s, t] for s, t in E if v in [s, t]) <= 1
-    model.objective = maximize(xsum(weights[edge] * edge_vars[edge] for edge in E))
+    model.objective = maximize(xsum( xsum(((weights[edge] + weights[edge[1], edge[0]]) / 2) * edge_vars[edge] for edge in E) for edge in E))
     model.optimize(max_seconds = 300)
     return sorted([e for e in E if edge_vars[e].x > .01])
 
