@@ -19,7 +19,7 @@ def get_graph(random=False, N = 100, AVG_DEGREE = 9):
             for j in range(i + 1, N):
                 if random.random() < AVG_DEGREE / N:
                     score = random.choice([4,4,4,4,4,4,4,4,4,4,6,9])
-                    score = int(random.random() * 100) + 1
+                    score = random.random()
                     out[str(i)].append((j, score))
                     out[str(j)].append((i, score))
 
@@ -104,32 +104,109 @@ def do_matching_stable(graph, visualize = True, individual = 1, communal = 10000
     model.optimize(max_seconds = 300)
     return sorted([e for e in E if edge_vars[e].x > .01])
 
-def analyze(result, name = "matching"):
+def do_matching_double_matches(graph):
+    print("Starting model")
+    weights = dict()
+    graph = {int(key): graph[key] for key in graph}
+    E = set()
+    V = graph.keys()
+    inputs = {v:[] for v in V}
+    outputs = {v:[] for v in V}
+    for v in V:
+        original = v
+        for u, weight in graph[original]:
+            s, t = (u, v) if u < v else (v, u)
+            edge = (s,t)
+            E.add(edge)
+            weights[(original, u)] = weight
+            outputs[original].append(u)
+            inputs[u].append(original)
+
+
+    model = Model("Allow double matches based")
+    edge_vars = {e:model.add_var(var_type = BINARY) for e in E}
+    undirected = dict()
+    for e in E:
+        undirected[e] = edge_vars[e]
+        undirected[e[1], e[0]] = edge_vars[e]
+
+    is_best = {e: model.add_var(var_type=BINARY) for e in undirected.keys()}
+    penalty = {v :model.add_var(var_type = BINARY) for v in V}
+    happiness = {v:model.add_var() for v in V}
+
+
+    epsilon = .01
+    C = 1e3
+
+    for v in V:
+        model += xsum(edge_vars[s, t] for s, t in E if v in [s, t]) <= 1 + penalty[v]
+        model += happiness[v] <= xsum(edge_vars[s, t] for s, t in E if v in [s, t]) * C
+        if outputs[v]:
+            model += xsum(is_best[(v, m)] for m in outputs[v]) == 1
+            for m in outputs[v]:
+                model += happiness[v] <= undirected[(v, m)] * weights[(v, m)] + (1 - is_best[(v, m)]) * C
+        else:
+            happiness[v] <= 0
+    model.objective = maximize(xsum(happiness[v] for v in V) - epsilon * xsum(penalty[v] for v in V))
+    model.optimize(max_seconds = 300)
+
+    model.write("out_lp.lp")
+
+    return sorted([e for e in E if edge_vars[e].x > .01])
+
+def analyze(result, name = "matching", detailed = False):
     input(">>> See Results for " + name)
-    print("Number of couples:", len(result))
+    scores = dict()
+    for u in graph:
+        for v, weight in graph[u]:
+            scores[(int(u), int(v))] = weight
+
+
     print("Raw couples:", result)
+    double_matches = 0
     mapping_dict = dict()
     for u, v in result:
-        if u in mapping_dict or v in mapping_dict:
-            print("Invalid matching", u, v, mapping_dict.get(u, None), mapping_dict.get(v, None))
-            exit(1)
+        new_score = scores[(u, v)]
+        if u in mapping_dict:
+            double_matches += 1
+            old = mapping_dict[u]
+            old_score = scores[(u, old)]
+            if old_score < new_score:
+                mapping_dict[u] = v
+        else:
+            mapping_dict[u] = v
+
+        if v in mapping_dict:
+            double_matches += 1
+            old = mapping_dict[v]
+            old_score = scores[(v, old)]
+            if old_score < new_score:
+                mapping_dict[v] = u
+        else:
+            mapping_dict[v] = u
+
         if u == v:
             print("Somebody is partnered with themselves")
             exit(1)
+
         if str(u) not in graph or str(v) not in graph:
             print((u, v), "Nonexistent couple")
             exit(1)
-        mapping_dict[u] = v
-        mapping_dict[v] = u
 
+    score_dict = scores
     scores = []
+
+    print("Number of matched people", len(mapping_dict))
+    print("Number of double matches", double_matches)
 
     for v in graph:
         person = mapping_dict.get(int(v), "")
-        print(v, "is matched with", str(person) + ("Nobody") * (1 - int(person is not "")))
+        if detailed:
+            print(v, "is matched with", str(person) + ("Nobody") * (1 - int(person is not "")))
         if person is not "":
-            score = (max(graph[str(v)], key=lambda lst: lst[0] == person)[1] + max(graph[str(person)], key=lambda lst: lst[0] == v)[1])/2
-            print("This matching scores:", score)
+            score = score_dict[(int(v), int(person))]
+            if detailed:
+                print("This matching scores:", score)
             scores.append(score)
 
     print("The number of people with a match:", len(scores))
@@ -157,12 +234,15 @@ def get_stable_roommates_instance():
 "6" :   [(5, 6),  (1, 5), (3, 4), (4, 3), (2, 2)]}
 
 
-graph = get_graph(random=True, N = 300, AVG_DEGREE= 15)
+graph = get_graph(random=True, N = 3000, AVG_DEGREE= 4)
 # graph = get_stable_roommates_instance() # solution {1, 6}, {2,4}, {3, 5}}
 result_max = do_matching(graph, visualize = False)
 result_stable = do_matching_stable(graph, visualize = False, individual = 1, communal = 1000)
+result_double = do_matching_double_matches(graph)
 analyze(result_max, name = "Maximum Matching")
 analyze(result_stable, name = "Stable pairings")
+analyze(result_double, name = "Allow double matches")
+
 
 
 
