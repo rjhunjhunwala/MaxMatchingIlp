@@ -150,9 +150,54 @@ def do_matching_double_matches(graph):
     model.objective = maximize(xsum(happiness[v] for v in V) - epsilon * xsum(penalty[v] for v in V))
     model.optimize(max_seconds = 300)
 
-    model.write("out_lp.lp")
 
     return sorted([e for e in E if edge_vars[e].x > .01])
+
+def do_matching_two_round(graph):
+    print("Starting model")
+    weights = dict()
+    graph = {int(key): graph[key] for key in graph}
+    E = set()
+    V = graph.keys()
+    inputs = {v:[] for v in V}
+    outputs = {v:[] for v in V}
+    for v in V:
+        original = v
+        for u, weight in graph[original]:
+            s, t = (u, v) if u < v else (v, u)
+            edge = (s,t)
+            E.add(edge)
+            weights[(original, u)] = weight
+            outputs[original].append(u)
+            inputs[u].append(original)
+
+
+    model = Model("Rogue Couples based")
+    edge_vars = {e:model.add_var(var_type = BINARY) for e in E}
+    undirected = dict()
+    for e in E:
+        undirected[e] = edge_vars[e]
+        undirected[e[1], e[0]] = edge_vars[e]
+    second_vars = {e: model.add_var(var_type=BINARY) for e in E}
+    partners = dict()
+    second_round_partners = dict()
+    for v in V:
+        partners[v] = model.add_var()
+        model += partners[v] == xsum(edge_vars[s, t] for s, t in E if v in [s, t])
+        model += partners[v] <= 1
+    for v in V:
+        second_round_partners[v] = model.add_var()
+        model += second_round_partners[v] == xsum(second_vars[s, t] for s, t in E if v in [s, t])
+        model += second_round_partners[v] <= 1
+    for e in E:
+        u, v = e
+        model += second_vars[(u, v)] <= 2 - partners[v] - partners[u]
+
+
+    model.objective = maximize(xsum(((weights[edge] + weights[edge[1], edge[0]]) / 2) * (edge_vars[edge] + second_vars[edge]) for edge in E))
+    model.optimize(max_seconds = 10
+    00)
+    return sorted([e for e in E if edge_vars[e].x > .01] + [e for e in E if second_vars[e].x > .01])
 
 def analyze(result, name = "matching", detailed = False):
     input(">>> See Results for " + name)
@@ -234,15 +279,16 @@ def get_stable_roommates_instance():
 "6" :   [(5, 6),  (1, 5), (3, 4), (4, 3), (2, 2)]}
 
 
-graph = get_graph(random=True, N = 3000, AVG_DEGREE= 4)
+graph = get_graph(random=True, N = 100, AVG_DEGREE= 5)
 # graph = get_stable_roommates_instance() # solution {1, 6}, {2,4}, {3, 5}}
 result_max = do_matching(graph, visualize = False)
 result_stable = do_matching_stable(graph, visualize = False, individual = 1, communal = 1000)
 result_double = do_matching_double_matches(graph)
+result_two_round = do_matching_two_round(graph)
 analyze(result_max, name = "Maximum Matching")
 analyze(result_stable, name = "Stable pairings")
 analyze(result_double, name = "Allow double matches")
-
+analyze(result_two_round, name = "Run two rounds")
 
 
 
