@@ -195,8 +195,7 @@ def do_matching_two_round(graph):
 
 
     model.objective = maximize(xsum(((weights[edge] + weights[edge[1], edge[0]]) / 2) * (edge_vars[edge] + second_vars[edge]) for edge in E))
-    model.optimize(max_seconds = 10
-    00)
+    model.optimize(max_seconds = 1000)
     return sorted([e for e in E if edge_vars[e].x > .01] + [e for e in E if second_vars[e].x > .01])
 
 def analyze(result, name = "matching", detailed = False):
@@ -279,7 +278,7 @@ def get_stable_roommates_instance():
 "6" :   [(5, 6),  (1, 5), (3, 4), (4, 3), (2, 2)]}
 
 
-graph = get_graph(random=True, N = 100, AVG_DEGREE= 5)
+graph = get_graph(random=True, N = 50, AVG_DEGREE= 50)
 # graph = get_stable_roommates_instance() # solution {1, 6}, {2,4}, {3, 5}}
 result_max = do_matching(graph, visualize = False)
 result_stable = do_matching_stable(graph, visualize = False, individual = 1, communal = 1000)
