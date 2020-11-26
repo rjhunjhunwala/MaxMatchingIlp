@@ -8,9 +8,9 @@ import numpy as np
 
 import matplotlib.pyplot as plt
 
-def get_graph(random=False, N = 100, AVG_DEGREE = 9):
-    if not random:
-        with open("possibleMatches.json", "r") as fh:
+def get_graph(file = "", N = 100, AVG_DEGREE = 9):
+    if file:
+        with open(file, "r") as fh:
             return json.load(fh)
     else:
         import random
@@ -24,6 +24,37 @@ def get_graph(random=False, N = 100, AVG_DEGREE = 9):
                     out[str(j)].append((i, score))
 
         return out
+def do_double_matching(graph, visualize = True):
+    print("Starting model")
+    weights = dict()
+    graph = {int(key): graph[key] for key in graph}
+    E = set()
+    V = graph.keys()
+
+    for v in V:
+        original = v
+        for u, weight in graph[original]:
+            s, t = (u, v) if u < v else (v, u)
+            edge = (s,t)
+            E.add(edge)
+            weights[original, u] = weight
+
+
+    if visualize:
+        graph = nx.Graph()
+        graph.add_nodes_from(V)
+        graph.add_edges_from(E)
+        nx.draw_kamada_kawai(graph)
+        plt.show()
+
+    model = Model("Maximum matching")
+    edge_vars = {e:model.add_var(var_type = BINARY) for e in E}
+    for v in V:
+        model += xsum(edge_vars[s, t] for s, t in E if v in [s, t]) <= 2
+    model.objective = maximize(xsum( xsum(((weights[edge] + weights[edge[1], edge[0]]) / 2) * edge_vars[edge] for edge in E) for edge in E))
+    model.optimize(max_seconds = 300)
+    return sorted([e for e in E if edge_vars[e].x > .01])
+
 def do_matching(graph, visualize = True):
     print("Starting model")
     weights = dict()
@@ -135,7 +166,7 @@ def do_matching_double_matches(graph):
     happiness = {v:model.add_var() for v in V}
 
 
-    epsilon = .01
+    epsilon = .0000001
     C = 1e3
 
     for v in V:
@@ -200,6 +231,7 @@ def do_matching_two_round(graph):
 
 def analyze(result, name = "matching", detailed = False):
     input(">>> See Results for " + name)
+    print("Total unmatched", sum(not value for value in graph.values()))
     scores = dict()
     for u in graph:
         for v, weight in graph[u]:
@@ -209,10 +241,12 @@ def analyze(result, name = "matching", detailed = False):
     print("Raw couples:", result)
     double_matches = 0
     mapping_dict = dict()
+    num_matches_by_person = dict()
     for u, v in result:
         new_score = scores[(u, v)]
         if u in mapping_dict:
             double_matches += 1
+            num_matches_by_person[u] += 1
             old = mapping_dict[u]
             old_score = scores[(u, old)]
             if old_score < new_score:
@@ -222,6 +256,7 @@ def analyze(result, name = "matching", detailed = False):
 
         if v in mapping_dict:
             double_matches += 1
+            num_matches_by_person[v] += 1
             old = mapping_dict[v]
             old_score = scores[(v, old)]
             if old_score < new_score:
@@ -239,7 +274,7 @@ def analyze(result, name = "matching", detailed = False):
 
     score_dict = scores
     scores = []
-
+    print("Maximum matches per person ", max(num_matches_by_person.values()))
     print("Number of matched people", len(mapping_dict))
     print("Number of double matches", double_matches)
 
@@ -278,16 +313,19 @@ def get_stable_roommates_instance():
 "6" :   [(5, 6),  (1, 5), (3, 4), (4, 3), (2, 2)]}
 
 
-graph = get_graph(random=True, N = 50, AVG_DEGREE= 50)
+
+graph = get_graph(file = "secondGraph.json", N = 20, AVG_DEGREE= 20)
 # graph = get_stable_roommates_instance() # solution {1, 6}, {2,4}, {3, 5}}
 result_max = do_matching(graph, visualize = False)
 result_stable = do_matching_stable(graph, visualize = False, individual = 1, communal = 1000)
 result_double = do_matching_double_matches(graph)
-result_two_round = do_matching_two_round(graph)
+result_two_round = do_double_matching(graph, visualize = False)
+result_slow_two = do_matching_two_round(graph)
 analyze(result_max, name = "Maximum Matching")
 analyze(result_stable, name = "Stable pairings")
 analyze(result_double, name = "Allow double matches")
-analyze(result_two_round, name = "Run two rounds")
+analyze(result_two_round, name = "Run two matches")
+analyze(result_two_round, name = "Slow two round")
 
 
 
