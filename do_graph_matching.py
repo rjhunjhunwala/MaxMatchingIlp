@@ -135,12 +135,14 @@ def do_matching_stable(graph, visualize = True, individual = 1, communal = 10000
     model.optimize(max_seconds = 300)
     return sorted([e for e in E if edge_vars[e].x > .01])
 
-def do_matching_double_matches(graph):
+def do_matching_double_matches(graph, wants_two_matches = None):
     print("Starting model")
     weights = dict()
     graph = {int(key): graph[key] for key in graph}
     E = set()
     V = graph.keys()
+    if not wants_two_matches:
+        wants_two_matches = {v:True for v in V}
     inputs = {v:[] for v in V}
     outputs = {v:[] for v in V}
     for v in V:
@@ -170,7 +172,7 @@ def do_matching_double_matches(graph):
     C = 1e3
 
     for v in V:
-        model += xsum(edge_vars[s, t] for s, t in E if v in [s, t]) <= 1 + penalty[v]
+        model += xsum(edge_vars[s, t] for s, t in E if v in [s, t]) <= 1 + penalty[v] * wants_two_matches[v]
         model += happiness[v] <= xsum(edge_vars[s, t] for s, t in E if v in [s, t]) * C
         if outputs[v]:
             model += xsum(is_best[(v, m)] for m in outputs[v]) == 1
@@ -241,12 +243,13 @@ def analyze(result, name = "matching", detailed = False):
     print("Raw couples:", result)
     double_matches = 0
     mapping_dict = dict()
-    num_matches_by_person = dict()
+    num_matches_by_person = {int(person):0 for person in graph}
     for u, v in result:
         new_score = scores[(u, v)]
+        num_matches_by_person[u] += 1
+        num_matches_by_person[v] += 1
         if u in mapping_dict:
             double_matches += 1
-            num_matches_by_person[u] += 1
             old = mapping_dict[u]
             old_score = scores[(u, old)]
             if old_score < new_score:
@@ -256,7 +259,6 @@ def analyze(result, name = "matching", detailed = False):
 
         if v in mapping_dict:
             double_matches += 1
-            num_matches_by_person[v] += 1
             old = mapping_dict[v]
             old_score = scores[(v, old)]
             if old_score < new_score:
@@ -316,16 +318,19 @@ def get_stable_roommates_instance():
 
 graph = get_graph(file = "secondGraph.json", N = 20, AVG_DEGREE= 20)
 # graph = get_stable_roommates_instance() # solution {1, 6}, {2,4}, {3, 5}}
+wants_two_matches = dict()
+import random
+wants_two_matches = {int(key): random.random() < 0.5 for key in graph}
 result_max = do_matching(graph, visualize = False)
 result_stable = do_matching_stable(graph, visualize = False, individual = 1, communal = 1000)
-result_double = do_matching_double_matches(graph)
-result_two_round = do_double_matching(graph, visualize = False)
-result_slow_two = do_matching_two_round(graph)
+result_double = do_matching_double_matches(graph, wants_two_matches = wants_two_matches)
+# result_two_round = do_double_matching(graph, visualize = False)
+# result_slow_two = do_matching_two_round(graph)
 analyze(result_max, name = "Maximum Matching")
 analyze(result_stable, name = "Stable pairings")
 analyze(result_double, name = "Allow double matches")
-analyze(result_two_round, name = "Run two matches")
-analyze(result_two_round, name = "Slow two round")
+# analyze(result_two_round, name = "Run two matches")
+# analyze(result_slow_two, name = "Slow two round")
 
 
 
